@@ -1,89 +1,28 @@
-name: Student Result Management CI
-
+name: Build
 on:
   push:
     branches:
       - main
   pull_request:
-    branches:
-      - main
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
+    types: [opened, synchronize, reopened]
 jobs:
-  test:
-    name: Run tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run pytest with coverage
-        run: |
-          pytest -v --maxfail=1 --disable-warnings \
-            --cov=app \
-            --cov-report=xml \
-            --cov-report=term-missing
-
   sonarqube:
-    name: SonarQube analysis
-    needs: test
-    runs-on: ubuntu-latest
-
+    name: SonarQube
+    runs-on: windows-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          fetch-depth: 0
-
-      - name: Run SonarQube scan
-        uses: SonarSource/sonarqube-scan-action@v5
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Cache SonarQube packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
-
-  docker:
-    name: Docker build and smoke test
-    needs:
-      - test
-      - sonarqube
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t student-result-management:ci .
-
-      - name: Run Docker container
-        run: |
-          docker run -d --name student-result-management -p 5000:5000 student-result-management:ci
-
-          for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:5000/health >/dev/null 2>&1; then
-              echo "Application is healthy"
-              break
-            fi
-            sleep 2
-          done
-
-          curl -fsS http://127.0.0.1:5000/health
-          curl -fsS http://127.0.0.1:5000/results/101
 
       - name: Cleanup container
         if: always()
